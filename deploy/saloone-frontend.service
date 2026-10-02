@@ -1,0 +1,18 @@
+# /etc/systemd/system/saloone-frontend.service   (no Docker option)
+# cd /opt/saloone-frontend && npm ci && npm run build && cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/
+[Unit]
+Description=Otomater Lifecycle Frontend
+After=network.target
+
+[Service]
+User=www-data
+WorkingDirectory=/opt/saloone-frontend/.next/standalone
+Environment=NODE_ENV=production PORT=3000 HOSTNAME=127.0.0.1
+Environment=ODOO_URL=http://127.0.0.1:8069
+Environment=ODOO_DB=your_database_name
+ExecStart=/usr/bin/node server.js
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
