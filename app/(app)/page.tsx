@@ -6,21 +6,24 @@ import { rpc } from '@/lib/odoo';
 import { Spinner, useToast } from '@/components/ui';
 import { Columns, Donut } from '@/components/Charts';
 import MyWork from '@/components/MyWork';
+import Welcome from '@/components/Welcome';
+import Performance from '@/components/Performance';
+import Trends from '@/components/Trends';
 
 const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const monthStart = () => { const d = new Date(); d.setDate(1); return ymd(d); };
 
-const KPIS: { key: string; label: string; kind: 'money' | 'count' | 'pct'; tone: string; go?: string }[] = [
+const KPIS: { key: string; label: string; kind: 'money' | 'count' | 'pct'; tone: string; go?: string; states?: string[] }[] = [
   { key: 'revenue', label: 'Revenue', kind: 'money', tone: 'good' },
   { key: 'est_profit', label: 'Est. profit', kind: 'money', tone: 'good' },
-  { key: 'bookings', label: 'Bookings', kind: 'count', tone: 'info', go: 'bookings' },
-  { key: 'completed', label: 'Completed', kind: 'count', tone: 'good', go: 'bookings' },
+  { key: 'bookings', label: 'Bookings', kind: 'count', tone: 'info', go: 'bookings', states: [] },
+  { key: 'completed', label: 'Completed', kind: 'count', tone: 'good', go: 'bookings', states: ['completed', 'paid', 'closed'] },
   { key: 'avg_bill', label: 'Average bill', kind: 'money', tone: 'info' },
   { key: 'customers', label: 'Customers', kind: 'count', tone: 'info' },
   { key: 'new_customers', label: 'New customers', kind: 'count', tone: 'good' },
   { key: 'repeat_rate', label: 'Repeat rate', kind: 'pct', tone: 'good' },
-  { key: 'cancelled', label: 'Cancelled', kind: 'count', tone: 'warn', go: 'bookings' },
-  { key: 'no_show', label: 'No-shows', kind: 'count', tone: 'bad', go: 'bookings' },
+  { key: 'cancelled', label: 'Cancelled', kind: 'count', tone: 'warn', go: 'bookings', states: ['cancelled'] },
+  { key: 'no_show', label: 'No-shows', kind: 'count', tone: 'bad', go: 'bookings', states: ['no_show'] },
   { key: 'no_show_rate', label: 'No-show rate', kind: 'pct', tone: 'bad' },
   { key: 'discount', label: 'Discounts given', kind: 'money', tone: 'warn' },
   { key: 'commission', label: 'Staff commission', kind: 'money', tone: 'warn' },
@@ -28,13 +31,23 @@ const KPIS: { key: string; label: string; kind: 'money' | 'count' | 'pct'; tone:
   { key: 'staff_working', label: 'Staff working', kind: 'count', tone: 'info' },
 ];
 
+const roleOf = (r: any) => (r?.admin ? 'Owner' : r?.manager ? 'Manager' : r?.accountant ? 'Accounts' : r?.receptionist ? 'Front desk' : 'My');
+
 export default function Dashboard() {
   const router = useRouter();
   const { push } = useToast();
   const [data, setData] = useState<any>(null);
   const [meta, setMeta] = useState<any>(null);
+  const [ctx, setCtx] = useState<any>(null);
+  const [trends, setTrends] = useState<any>(null);
+  const [perf, setPerf] = useState<any[]>([]);
   const [f, setF] = useState<{ from: string; to: string; emp: number | ''; prod: number | '' }>({ from: monthStart(), to: ymd(new Date()), emp: '', prod: '' });
-  useEffect(() => { rpc('salon.booking', 'get_booking_meta', []).then(setMeta).catch(() => {}); }, []);
+  useEffect(() => {
+    rpc('salon.booking', 'get_booking_meta', []).then(setMeta).catch(() => {});
+    rpc('salon.dashboard', 'get_app_context', []).then(setCtx).catch(() => {});
+    rpc('salon.dashboard', 'get_trends', [6]).then(setTrends).catch(() => {});
+  }, []);
+  useEffect(() => { rpc<any[]>('salon.dashboard', 'get_staff_performance', [], { date_from: f.from, date_to: f.to }).then(setPerf).catch(() => setPerf([])); }, [f.from, f.to]);
 
   const load = useCallback(() => {
     rpc('salon.dashboard', 'get_dashboard_data', [], { date_from: f.from, date_to: f.to, employee_id: f.emp || false, product_id: f.prod || false })
@@ -49,11 +62,12 @@ export default function Dashboard() {
     return k.kind === 'money' ? `${cur} ${money(v)}` : k.kind === 'pct' ? `${money(v)}%` : Number(v).toLocaleString();
   };
   const rows = (c: any[] = []) => c.map((r) => ({ key: r.label, label: r.label, value: Math.round((r.value || 0) * 100) / 100 }));
-  const days = rows(data.charts.revenue_by_day).slice(-14).map((r) => ({ ...r, label: r.label.slice(5) }));
+  const days = rows(data.charts.revenue_by_day).slice(-8).map((r) => ({ ...r, label: r.label.slice(8) }));
   return (
     <div>
-      <div className="page-head"><h1>Dashboard</h1></div>
+      <Welcome subtitle={ctx ? `${ctx.company} · ${roleOf(ctx.roles)} dashboard` : undefined} />
       <MyWork />
+      <div className="page-head"><h1>{ctx ? `${roleOf(ctx.roles)} dashboard` : 'Dashboard'}</h1></div>
       <div className="filters">
         <input type="date" value={f.from} onChange={(e) => setF({ ...f, from: e.target.value })} />
         <input type="date" value={f.to} onChange={(e) => setF({ ...f, to: e.target.value })} />
@@ -68,12 +82,20 @@ export default function Dashboard() {
       </div>
       <div className="kpis">
         {KPIS.map((k) => (
-          <button key={k.key} className={`kpi ${k.tone}`} onClick={() => k.go && router.push(`/${k.go}`)}>
+          <button key={k.key} className={`kpi ${k.tone}`} onClick={() => {
+            if (!k.go) return;
+            const dom: any[] = [['booking_date', '>=', f.from], ['booking_date', '<=', f.to]];
+            if (k.states?.length) dom.push(['state', 'in', k.states]);
+            if (f.emp) dom.push(['line_ids.employee_id', '=', f.emp]);
+            router.push(`/${k.go}?domain=${encodeURIComponent(JSON.stringify(dom))}&title=${encodeURIComponent(k.label)}`);
+          }}>
             <span className="kpi-label">{k.label}</span>
             <span className="kpi-value">{fmtK(k)}</span>
           </button>
         ))}
       </div>
+      {perf.length > 0 && !ctx?.roles?.staff_only && <Performance title="Staff performance" rows={perf} currency={cur} />}
+      {trends && <Trends data={trends} />}
       <div className="cards2">
         <section className="card"><h3>Revenue by day</h3><Columns rows={days} /></section>
         <section className="card"><h3>Booking status</h3><Donut rows={rows(data.charts.booking_status)} /></section>

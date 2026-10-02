@@ -137,7 +137,7 @@ input[type=checkbox] { width: 17px; height: 17px; accent-color: var(--brand); } 
 .welcome.morning { background-image: linear-gradient(120deg, #F59E0B, #EA580C 60%, #9A3412); }
 .welcome.afternoon { background-image: linear-gradient(120deg, #EA580C, #C2410C 60%, #7C2D12); }
 .welcome.evening { background-image: linear-gradient(120deg, #F97316, #C2410C 55%, #7C2D12); }
-.welcome.night { background-image: linear-gradient(120deg, #3B1A0B, #312e81 55%, #9A3412); }
+.welcome.night { background-image: linear-gradient(120deg, #3B1A0B, #7C2D12 55%, #C2410C); }
 .welcome .w-icon { width: 64px; height: 64px; border-radius: 18px; background: rgba(255,255,255,.2); backdrop-filter: blur(6px); display: grid; place-items: center; flex: none; animation: wPop .8s .2s cubic-bezier(.3,1.6,.5,1) both; }
 .welcome .w-icon svg { animation: wSpin 14s linear infinite; }
 .welcome .w-text { position: relative; z-index: 1; animation: wUp .7s .25s both; }
